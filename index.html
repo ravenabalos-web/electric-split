@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2c3070">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="電費分攤">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>分表電費計算</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: dark indigo-to-violet gradient, frosted glass tiles in a 2-column grid, orange accent square, icon tab bar.
+   Single dark look by design (user-chosen reference), so no light theme. */
+:root{
+  color-scheme:dark;
+  --bg1:#2c3070; --bg2:#4b2f78; --bg3:#1b1d44;
+  --glass:rgba(255,255,255,.075); --glass-hi:rgba(255,255,255,.13); --stroke:rgba(255,255,255,.13);
+  --ink:#f5f4ff; --muted:rgba(232,230,255,.62); --faint:rgba(232,230,255,.38);
+  --accent:#ffa63d; --accent-ink:#2b1903;
+  --c1:#4f8dff; --c2:#ff52a8; --c3:#ffb43f; --c4:#38d69c; --c5:#b994ff; --c6:#f5f4ff;
+  --drum:rgba(6,7,22,.72); --drum-fg:#ffffff; --dec:#ff7a8a;
+  --warn:#ffd27a; --warn-bg:rgba(255,190,70,.16); --err:#ff9aa5; --err-bg:rgba(255,80,110,.18);
+  --nav:#232557;
+  --f-disp:"Outfit","Noto Sans TC",system-ui,sans-serif;
+  --f-body:"Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{min-height:100%;background:var(--bg3)}
+body{background:var(--bg3) linear-gradient(165deg,var(--bg1) 0%,var(--bg2) 48%,var(--bg3) 100%) fixed;color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.55;min-height:100vh}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg1)}
+.wrap{max-width:560px;margin:0 auto;padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));padding-block:0 120px}
+
+/* top bar */
+.top{display:flex;align-items:center;justify-content:space-between;padding-block:18px 6px}
+.top h1{font-family:var(--f-disp);font-size:21px;font-weight:600;margin:0;letter-spacing:.02em}
+.top .line{display:block;width:34px;height:2px;background:var(--ink);opacity:.8;margin-top:8px;border-radius:2px}
+.cfg{width:52px;height:52px;border:0;border-radius:4px 14px 4px 14px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;cursor:pointer}
+.cfg svg{width:24px;height:24px}
+
+h2{font-family:var(--f-disp);font-size:13px;margin:0 0 10px;font-weight:500;color:var(--muted);letter-spacing:.12em}
+section{margin-bottom:22px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.note{font-size:13px;color:var(--muted)}
+svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+/* glass */
+.panel,.tile,.card{background:var(--glass);border:1px solid var(--stroke);border-radius:16px;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.panel{padding:16px}
+
+/* hero */
+.hero{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-block:22px 22px}
+.hero .mon{font-family:var(--f-disp);font-size:24px;font-weight:500}
+.hero .yr{font-size:13px;color:var(--faint);font-family:var(--f-num)}
+.hero .big{font-family:var(--f-disp);font-size:40px;font-weight:700;line-height:1;letter-spacing:-.01em;white-space:nowrap}
+.hero .big small{font-size:16px;font-weight:500;color:var(--muted);margin-left:4px}
+
+/* tiles */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tile{position:relative;padding:16px 14px 14px;min-height:122px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile .bar{width:46px;height:4px;border-radius:2px;background:var(--c);margin-bottom:12px}
+.tile .nm{font-size:15px;font-family:var(--f-disp);font-weight:500}
+.tile .v{font-family:var(--f-disp);font-size:26px;font-weight:600;line-height:1.2}
+.tile .v small{font-size:12px;font-weight:500;color:var(--muted);margin-left:3px;letter-spacing:.04em}
+.tile .s{font-size:12px;color:var(--muted)}
+.tile svg.i{position:absolute;right:12px;bottom:12px;opacity:.55;width:22px;height:22px}
+.empty{color:var(--muted);text-align:center;padding:26px 10px}
+
+/* action cards */
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:26px}
+.card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:16px 14px;color:var(--ink);font:inherit;cursor:pointer;min-width:0;position:relative}
+.card .ic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--glass-hi);margin-bottom:8px}
+.card b{font-family:var(--f-disp);font-size:18px;font-weight:600}
+.card .st{font-size:12px;color:var(--muted);line-height:1.45}
+.card.main{border-color:var(--accent);background:linear-gradient(160deg,rgba(255,166,61,.22),var(--glass))}
+.card.main .ic{background:var(--accent);color:var(--accent-ink)}
+.card .dot{position:absolute;top:14px;right:14px;width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(255,166,61,.25)}
+
+/* forms */
+label.f,.f{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;letter-spacing:.04em}
+input[type=text],input[type=date],textarea{font:inherit;color:var(--ink);background:rgba(8,9,30,.35);border:1px solid var(--stroke);border-radius:10px;padding:11px 12px;width:100%}
+input::placeholder,textarea::placeholder{color:var(--faint)}
+input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+textarea{font-family:var(--f-num);font-size:12px;min-height:110px}
+.bills{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.bills input{font-family:var(--f-num);font-size:18px}
+
+/* back + period */
+.back{background:transparent;border:0;color:var(--muted);padding:14px 0 6px;font-size:15px;cursor:pointer;font-family:inherit}
+.ptitle{font-family:var(--f-disp);font-size:26px;font-weight:600;margin:4px 0 16px}
+.period{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--f-num);font-size:18px;font-weight:700}
+.period .arrow{color:var(--faint)}
+.period input{width:auto;font-family:var(--f-num);font-size:16px}
+
+/* meter rows (抄表) */
+.meters{display:grid;gap:12px}
+.m{position:relative;padding:14px;border-radius:16px;background:var(--glass);border:1px solid var(--stroke);display:grid;grid-template-columns:1fr 1.4fr;gap:6px 12px;align-items:end}
+.m .head{grid-column:1/-1;display:flex;align-items:center;gap:10px}
+.m .head .bar{width:30px;height:4px;border-radius:2px;background:var(--c)}
+.m .head .nm{font-family:var(--f-disp);font-size:18px;font-weight:600}
+.m .head .use{margin-left:auto;font-size:13px;color:var(--muted)}
+.m .head .use b{color:var(--ink);font-family:var(--f-num);font-size:15px}
+.lastv{font-family:var(--f-num);font-size:16px;color:var(--muted);padding:10px 0}
+.drum{background:var(--drum)!important;color:var(--drum-fg)!important;border:1px solid var(--stroke)!important;font-family:var(--f-num)!important;font-size:22px!important;letter-spacing:.18em;text-align:center;padding:9px 6px!important}
+.m .meta{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px}
+.m .meta:empty{display:none}
+.hint{color:var(--dec);font-size:12px}
+.bad .drum{border-color:var(--err)!important;box-shadow:0 0 0 1px var(--err)}
+
+.msg{font-size:13px;border-radius:8px;padding:4px 8px;display:inline-block}
+.msg.w{background:var(--warn-bg);color:var(--warn)}
+.msg.e{background:var(--err-bg);color:var(--err)}
+.errbox{margin-top:10px;display:grid;gap:4px}
+
+button{font:inherit;cursor:pointer;border-radius:12px;border:1px solid var(--stroke);background:var(--glass);color:var(--ink);padding:11px 14px}
+.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-family:var(--f-disp);font-weight:600;width:100%;padding:15px;font-size:17px;letter-spacing:.03em}
+.primary:disabled,button:disabled{opacity:.5;cursor:default}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+.btns button{flex:1}
+.ghost{background:transparent}
+.danger{color:var(--err);border-color:rgba(255,154,165,.45)}
+.linkbtn{background:transparent;border:0;color:var(--accent);padding:0;font-size:13px}
+
+/* tables */
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:9px 6px;text-align:right;border-bottom:1px solid var(--stroke);white-space:nowrap}
+th{font-size:12px;color:var(--muted);font-weight:500}
+th:first-child,td:first-child{text-align:left}
+td:first-child b{display:inline-flex;align-items:center;gap:8px}
+td:first-child b::before{content:"";width:4px;height:14px;border-radius:2px;background:var(--c,var(--c6))}
+tfoot td{font-weight:700;border-bottom:0}
+td.pay{font-weight:700;font-size:16px}
+.sub{font-size:13px;color:var(--muted);margin:10px 0 12px}
+
+/* history */
+.rec{display:flex;flex-direction:column;gap:8px}
+.rec + .rec{margin-top:12px}
+.rec .tophd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.rec .date{font-weight:700;font-family:var(--f-num);font-size:14px}
+.rec .sum{font-family:var(--f-disp);font-size:20px;font-weight:600}
+
+/* settings */
+.mrow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.mrow input[type=text]{flex:1;font-family:var(--f-num)}
+.mrow label{font-size:13px;color:var(--muted);white-space:nowrap;display:flex;gap:4px;align-items:center}
+.banner{background:var(--warn-bg);color:var(--warn);padding:10px 12px;border-radius:10px;font-size:14px;margin:10px 0}
+
+/* toast + nav */
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg3);padding:9px 18px;border-radius:20px;font-size:14px;z-index:20;max-width:calc(100% - 40px);text-align:center}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--nav);border-top:1px solid var(--stroke);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+nav .in{display:flex;width:100%;max-width:560px}
+nav button{flex:1;border:0;border-radius:0;background:transparent;padding:10px 0 12px;color:var(--faint);font-size:11px;display:flex;flex-direction:column;align-items:center;gap:4px;letter-spacing:.04em}
+nav button[aria-current="page"]{color:var(--accent);font-weight:700}
+@media (max-width:360px){.grid,.actions{gap:10px}.tile .v{font-size:22px}.hero .big{font-size:32px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-meter" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 13l4-4M8 5.5L7 4M16 5.5l1-1.5"/></symbol>
+  <symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h1M12 12h1M16 12h0M8 16h1M12 16h1M16 12v4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M19 7h1M4 17h3M11 17h9"/><circle cx="16" cy="7" r="2.4"/><circle cx="9" cy="17" r="2.4"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M4 21V6l8-3v18M12 9l8 3v9M3 21h18M8 9h.01M8 13h.01M8 17h.01M16 15h.01M16 18h.01"/></symbol>
+</svg>
+
+<div class="wrap">
+  <div class="top">
+    <div><h1 id="pageTitle">電費分攤</h1><span class="line"></span></div>
+    <button class="cfg" id="goSet" aria-label="設定"><svg class="i"><use href="#i-sliders"/></svg></button>
+  </div>
+  <div id="storeBanner" class="banner" hidden>這個瀏覽器無法儲存資料，關掉頁面後紀錄會消失。請到設定複製備份。</div>
+
+  <!-- 首頁 -->
+  <main id="v-home">
+    <div class="hero" id="hero"></div>
+    <div class="actions">
+      <button class="card" id="goRead">
+        <span class="ic"><svg class="i"><use href="#i-meter"/></svg></span>
+        <b>抄電表</b><span class="st" id="readStatus"></span>
+      </button>
+      <button class="card" id="goCalc">
+        <span class="ic"><svg class="i"><use href="#i-calc"/></svg></span>
+        <b>計算電費</b><span class="st" id="calcStatus"></span>
+      </button>
+    </div>
+    <h2 id="gridTitle">本期每戶</h2>
+    <div class="grid" id="homeGrid"></div>
+  </main>
+
+  <!-- 抄電表 -->
+  <main id="v-read" hidden>
+    <button class="back" data-home>← 首頁</button>
+    <div class="ptitle">抄電表</div>
+    <section>
+      <h2>抄表區間</h2>
+      <div class="panel">
+        <div class="period"><span id="rStart">—</span><span class="arrow">→</span><input type="date" id="rDate" aria-label="這次抄表日期"></div>
+        <p class="note" id="rSpan" style="margin:8px 0 0"></p>
+      </div>
+    </section>
+    <section>
+      <h2>電表讀數 KWH</h2>
+      <div class="meters" id="rMeters"></div>
+    </section>
+    <button class="primary" id="saveRead">儲存電表</button>
+    <div id="readErr" class="errbox" hidden></div>
+    <p class="note" id="editHint" style="margin-top:14px"></p>
+  </main>
+
+  <!-- 計算電費 -->
+  <main id="v-calc" hidden>
+    <button class="back" data-home>← 首頁</button>
+    <div class="ptitle">計算電費</div>
+    <div id="calcBlocked" class="panel" hidden></div>
+    <div id="calcReady">
+      <section>
+        <h2>這期用電</h2>
+        <div class="panel">
+          <div class="period" id="cPeriod"></div>
+          <p class="note" id="cSpan" style="margin:4px 0 10px"></p>
+          <div class="tbl"><table id="usageTable"></table></div>
+        </div>
+      </section>
+      <section>
+        <h2>台電帳單</h2>
+        <div class="panel">
+          <div class="bills">
+            <div><label class="f" for="mainBill">主帳單金額（2・3・4 樓）</label><input type="text" id="mainBill" inputmode="numeric" placeholder="6789"></div>
+            <div><label class="f" for="sharedBill">1 樓帳單金額</label><input type="text" id="sharedBill" inputmode="numeric" placeholder="205"></div>
+            <div style="grid-column:1/-1"><label class="f" for="billKwh">主帳單的計費度數（選填）</label><input type="text" id="billKwh" inputmode="numeric" placeholder="1718"></div>
+          </div>
+          <p class="note" style="margin:10px 0 0">有填計費度數：整棟 − 分表合計 = 公共用電，平均加到每戶。分表沒在台電抄表日抄的話請留空，改按度數比例分攤。</p>
+        </div>
+      </section>
+      <button class="primary" id="calcBtn">算出每戶金額</button>
+      <div id="calcErr" class="errbox" hidden></div>
+      <section id="result" hidden style="margin-top:24px">
+        <h2>分攤結果</h2>
+        <div class="panel">
+          <div class="tbl"><table id="resTable"></table></div>
+          <p class="sub" id="resSub"></p>
+          <div class="btns">
+            <button id="copyBtn">複製到 LINE</button>
+            <button id="saveBtn">儲存這期</button>
+          </div>
+          <textarea id="copyFallback" hidden readonly></textarea>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- 紀錄 -->
+  <main id="v-hist" hidden>
+    <div class="ptitle" style="margin-top:14px">紀錄</div>
+    <section><h2>電費紀錄</h2><div id="hist"></div></section>
+    <section><h2>抄表紀錄</h2><div class="panel tbl"><table id="readHist"></table></div></section>
+  </main>
+
+  <!-- 設定 -->
+  <main id="v-set" hidden>
+    <button class="back" data-home>← 首頁</button>
+    <div class="ptitle">設定</div>
+    <section>
+      <h2>電表清單</h2>
+      <div class="panel">
+        <div id="mlist"></div>
+        <div class="btns" style="margin-top:6px"><button id="addMeter">新增電表</button><button id="saveMeters">儲存清單</button></div>
+        <p class="note">勾選「末格是小數」的電表，抄表時會提醒最右一格不用輸入（例如 4A 那顆舊 Fuji 表）。</p>
+      </div>
+    </section>
+    <section>
+      <h2>備份</h2>
+      <div class="panel">
+        <p class="note" style="margin-top:0">把下面這段文字複製起來，貼到 LINE 記事本或傳給自己保存。</p>
+        <textarea id="backupOut" readonly></textarea>
+        <div class="btns" style="margin-top:8px"><button id="copyBackup">複製備份</button></div>
+      </div>
+    </section>
+    <section>
+      <h2>還原</h2>
+      <div class="panel">
+        <p class="note" style="margin-top:0">貼上之前的備份文字。還原會覆蓋目前所有資料。</p>
+        <textarea id="restoreIn" placeholder="在這裡貼上備份"></textarea>
+        <div class="btns" style="margin-top:8px"><button id="restoreBtn">還原</button></div>
+        <div id="restoreMsg" class="note"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<nav><div class="in">
+  <button data-v="home" aria-current="page"><svg class="i"><use href="#i-home"/></svg>首頁</button>
+  <button data-v="read"><svg class="i"><use href="#i-meter"/></svg>抄電表</button>
+  <button data-v="calc"><svg class="i"><use href="#i-calc"/></svg>計算</button>
+  <button data-v="hist"><svg class="i"><use href="#i-list"/></svg>紀錄</button>
+</div></nav>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const KEY = 'meter-split-v1';
+const clone = o => JSON.parse(JSON.stringify(o));
+function sameVals(x, y){ const k = new Set([...Object.keys(x), ...Object.keys(y)]); return [...k].every(id => x[id] === y[id]); }
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('zh-TW');
+const smooth = () => matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+
+const SEED_PREV = {'2A':9766,'2B':9527,'3A':18478,'4A':80948,'4B':12096};
+const SEED_CURR = {'2A':10249,'2B':10089,'3A':18756,'4A':81200,'4B':12313};
+const DEFAULT = {
+  meters: [{id:'2A',dec:false},{id:'2B',dec:false},{id:'3A',dec:false},{id:'4A',dec:true},{id:'4B',dec:false}],
+  /* 抄表紀錄：依抄表先後排列，最後一筆是最新 */
+  readings: [{date:'', values:SEED_PREV}, {date:'2026-11-03', values:SEED_CURR}],
+  /* 電費紀錄：每期用到的兩次讀數＋帳單金額 */
+  records: [{id:'r20261103', start:'', date:'2026-11-03', prev:SEED_PREV, curr:SEED_CURR, mainBill:6789, sharedBill:205, billKwh:null}]
+};
+
+/* 舊版資料（只有 records / pending）轉成新格式 */
+function migrate(st){
+  if (!st || !Array.isArray(st.meters) || !Array.isArray(st.records)) return clone(DEFAULT);
+  st.records.forEach(r => { if (r.id === 'r20261104'){ r.id='r20261103'; r.date='2026-11-03'; } });
+  if (!Array.isArray(st.readings)){
+    const rd = [];
+    [...st.records].sort((a,b)=>a.date.localeCompare(b.date)).forEach(r => {
+      const last = rd[rd.length-1];
+      if (!last || !sameVals(last.values, r.prev)) rd.push({date:r.start||'', values:{...r.prev}});
+      rd.push({date:r.date, values:{...r.curr}});
+    });
+    if (st.pending && st.pending.date){
+      const v = {}; Object.keys(st.pending.curr||{}).forEach(k => { const n = toInt(st.pending.curr[k]); if (n!=null) v[k]=n; });
+      if (Object.keys(v).length) rd.push({date:st.pending.date, values:v});
+    }
+    st.readings = rd;
+  }
+  delete st.pending;
+  return st;
+}
+
+let state, canStore = true;
+try { const raw = localStorage.getItem(KEY); state = raw ? JSON.parse(raw) : clone(DEFAULT); }
+catch(e){ state = clone(DEFAULT); canStore = false; }
+state = migrate(state);
+function persist(){
+  try { localStorage.setItem(KEY, JSON.stringify(state)); canStore = true; } catch(e){ canStore = false; }
+  $('storeBanner').hidden = canStore;
+}
+persist();
+
+function toast(t){ const el=$('toast'); el.textContent=t; el.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>el.hidden=true,2000); }
+function toInt(v){ v=String(v??'').trim().replace(/,/g,''); return /^\d+$/.test(v) ? parseInt(v,10) : null; }
+function ymd(d){ return d ? d.replace(/-/g,'/') : '?'; }
+function range(a,b){ return `${ymd(a)}–${ymd(b)}`; }
+function days(a,b){ return (a && b) ? Math.round((new Date(b)-new Date(a))/86400000) : null; }
+function today(){ const t=new Date(); return new Date(t - t.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+const latest = () => state.readings[state.readings.length-1];
+const before = (k=1) => state.readings[state.readings.length-1-k];
+const isBilled = rd => !!rd && state.records.some(r => r.date === rd.date && sameVals(r.curr, rd.values));
+function usageBetween(a, b, id){ return (a && b && a.values[id]!=null && b.values[id]!=null) ? b.values[id]-a.values[id] : null; }
+
+/* 最大餘數法：小數變整數，總和剛好等於 target */
+function lrm(exact, target){
+  const fl = exact.map(Math.floor);
+  const rem = target - fl.reduce((a,b)=>a+b,0);
+  const order = exact.map((v,i)=>[v-Math.floor(v), i]).sort((a,b)=>b[0]-a[0]);
+  for (let k=0; k<rem; k++) fl[order[k % order.length][1]]++;
+  return fl;
+}
+/* billKwh 有填：公共用電 = 整棟 − 分表合計，平均加到每戶；沒填：按分表比例 */
+function compute(ids, prev, curr, mainBill, sharedBill, billKwh){
+  const usage = ids.map(id => curr[id] - prev[id]);
+  const subSum = usage.reduce((a,b)=>a+b,0);
+  const mode = billKwh == null ? 'ratio' : 'public';
+  const pub = mode === 'public' ? billKwh - subSum : 0;
+  const each = pub / ids.length;
+  const eff = usage.map(u => u + each);
+  const total = eff.reduce((a,b)=>a+b,0);
+  /* 尾數一次分配：先算每戶總額（主帳單＋1樓）再變整數，避免兩次多出來的 1 元落在同一戶 */
+  const mainEx = eff.map(e => mainBill * e / total);
+  const payS = lrm(mainEx.map(v => v + sharedBill / ids.length), mainBill + sharedBill);
+  /* 1 樓帳單的零頭（除不盡的那幾元）給總額被進位最多的戶，主帳單欄才不會出現負數 */
+  const base = Math.floor(sharedBill / ids.length);
+  const sharedS = ids.map(() => base);
+  ids.map((_, i) => [payS[i] - mainEx[i] - base, i]).sort((a, b) => b[0] - a[0])
+     .slice(0, sharedBill - base * ids.length).forEach(([, i]) => sharedS[i]++);
+  const mainS = payS.map((v, i) => v - sharedS[i]);
+  const rows = ids.map((id,i)=>({id, usage:usage[i], main:mainS[i], shared:sharedS[i], pay:mainS[i]+sharedS[i]}));
+  return {rows, mode, subSum, pub, each, total, billKwh, mainBill, sharedBill, perKwh: mainBill/total};
+}
+function d1(n){ return Number.isInteger(n) ? fmt(n) : n.toFixed(1); }
+function summary(r){
+  return r.mode === 'public'
+    ? `整棟 ${fmt(r.billKwh)} 度 − 分表合計 ${fmt(r.subSum)} 度 = 公共 ${fmt(r.pub)} 度，每戶加 ${d1(r.each)} 度。每度約 ${r.perKwh.toFixed(2)} 元。`
+    : `按 ${r.rows.length} 戶分表度數比例分攤（共 ${fmt(r.subSum)} 度，每度約 ${r.perKwh.toFixed(2)} 元）。`;
+}
+function lineText(start, date, r){
+  let t = `⚡ 電費分攤（${range(start, date)}）\n主帳單 ${fmt(r.mainBill)} 元 + 1樓 ${fmt(r.sharedBill)} 元\n`;
+  t += r.mode === 'public' ? `公共空間 ${fmt(r.pub)} 度，每戶加 ${d1(r.each)} 度\n\n` : `按分表度數比例分攤\n\n`;
+  r.rows.forEach(x => t += r.mode === 'public' ? `${x.id}：${fmt(x.usage)}+${d1(r.each)} 度，${fmt(x.pay)} 元\n` : `${x.id}：${fmt(x.usage)} 度，${fmt(x.pay)} 元\n`);
+  return t + `\n合計 ${fmt(r.mainBill + r.sharedBill)} 元`;
+}
+function renderResult(r, table){
+  const pub = r.mode === 'public';
+  table.innerHTML = `<thead><tr><th>電表</th><th>自用度數</th>${pub?'<th>+公共</th>':''}<th>主帳單</th><th>1樓</th><th>應付</th></tr></thead>
+  <tbody>${r.rows.map(x=>`<tr><td style="--c:${colorOf(x.id)}"><b>${x.id}</b></td><td class="num">${fmt(x.usage)}</td>${pub?`<td class="num">${d1(r.each)}</td>`:''}<td class="num">${fmt(x.main)}</td><td class="num">${fmt(x.shared)}</td><td class="num pay">${fmt(x.pay)}</td></tr>`).join('')}</tbody>
+  <tfoot><tr><td>合計</td><td class="num">${fmt(r.subSum)}</td>${pub?`<td class="num">${fmt(r.pub)}</td>`:''}<td class="num">${fmt(r.mainBill)}</td><td class="num">${fmt(r.sharedBill)}</td><td class="num pay">${fmt(r.mainBill+r.sharedBill)}</td></tr></tfoot>`;
+}
+async function copy(text, el){
+  try { await navigator.clipboard.writeText(text); toast('已複製'); }
+  catch(e){ if (el){ el.hidden=false; el.value=text; el.focus(); el.select(); } toast('請長按選取文字後複製'); }
+}
+function showErrs(box, errs){ box.hidden = !errs.length; box.innerHTML = errs.map(t=>`<div class="msg e" style="margin-bottom:4px">${t}</div>`).join(''); }
+
+/* ---------- 首頁 ---------- */
+function colorOf(id){ const i = state.meters.findIndex(m => m.id === id); return `var(--c${(i < 0 ? 5 : i % 5) + 1})`; }
+function renderHome(){
+  const L = latest();
+  $('readStatus').textContent = L ? `上次抄表 ${ymd(L.date)}` : '還沒有抄表紀錄';
+  const cs = $('calcStatus'), card = $('goCalc');
+  const pending = state.readings.length >= 2 && !isBilled(L);
+  card.classList.toggle('main', pending);
+  const dot = card.querySelector('.dot'); if (dot) dot.remove();
+  if (pending){ cs.textContent = `待計算 ${range(before().date, L.date)}`; card.insertAdjacentHTML('beforeend','<span class="dot" aria-hidden="true"></span>'); }
+  else cs.textContent = L ? '這期已算過，下次抄表後再來' : '先抄電表才能計算';
+  /* 本期 = 最近兩次抄表；有算過就顯示金額，還沒算就顯示度數 */
+  const hero = $('hero'), grid = $('homeGrid'), P = before();
+  if (!L || !P){
+    $('gridTitle').textContent = '本期每戶';
+    hero.innerHTML = '<div><div class="mon">本期</div><div class="yr">至少要抄兩次電表才有本期資料</div></div>';
+    grid.innerHTML = '<div class="tile empty" style="grid-column:1/-1">抄完電表後，本期每戶用電會顯示在這裡。</div>'; return;
+  }
+  const ids = state.meters.map(m => m.id);
+  const span = days(P.date, L.date);
+  const sub = `${range(P.date, L.date)}${span != null ? ` · ${span} 天` : ''}`;
+  const rec = state.records.find(r => r.date === L.date && sameVals(r.curr, L.values));
+  if (rec){
+    const rids = Object.keys(rec.curr).filter(id => rec.prev[id]!=null);
+    const r = compute(rids, rec.prev, rec.curr, rec.mainBill, rec.sharedBill, rec.billKwh ?? null);
+    $('gridTitle').textContent = '本期每戶應付';
+    hero.innerHTML = `<div><div class="mon">本期 · 已計算</div><div class="yr">${sub}</div></div><div class="big">$${fmt(rec.mainBill + rec.sharedBill)}</div>`;
+    grid.innerHTML = r.rows.map(x => `<div class="tile" style="--c:${colorOf(x.id)}"><span class="bar"></span><span class="nm">${x.id}</span><span class="v">${fmt(x.pay)}<small>元</small></span><span class="s">${fmt(x.usage)} 度${r.mode==='public' ? ` + 公共 ${d1(r.each)}` : ''}</span><svg class="i"><use href="#i-bolt"/></svg></div>`).join('')
+      + `<div class="tile" style="--c:var(--c6)"><span class="bar"></span><span class="nm">1 樓公用</span><span class="v">${fmt(rec.sharedBill)}<small>元</small></span><span class="s">每戶分 ${d1(rec.sharedBill / rids.length)} 元</span><svg class="i"><use href="#i-building"/></svg></div>`;
+  } else {
+    const us = ids.map(id => usageBetween(P, L, id));
+    const total = us.reduce((a, u) => a + (u ?? 0), 0);
+    $('gridTitle').textContent = '本期每戶用電';
+    hero.innerHTML = `<div><div class="mon">本期 · 待計算</div><div class="yr">${sub}</div></div><div class="big">${fmt(total)}<small>度</small></div>`;
+    grid.innerHTML = ids.map((id, i) => `<div class="tile" style="--c:${colorOf(id)}"><span class="bar"></span><span class="nm">${id}</span><span class="v">${us[i] == null ? '—' : fmt(us[i])}<small>度</small></span><span class="s">${us[i] == null ? '缺少讀數' : `佔 ${total ? (us[i] / total * 100).toFixed(1) : 0}%・金額待計算`}</span><svg class="i"><use href="#i-bolt"/></svg></div>`).join('')
+      + `<button class="tile" id="tileCalc" style="--c:var(--accent);text-align:left;font:inherit;color:inherit;cursor:pointer"><span class="bar"></span><span class="nm">帳單來了？</span><span class="v" style="font-size:20px">輸入金額</span><span class="s">算出每戶要付多少</span><svg class="i"><use href="#i-calc"/></svg></button>`;
+    $('tileCalc').addEventListener('click', openCalc);
+  }
+}
+
+/* ---------- 抄電表 ---------- */
+let rd = null; /* {editing:bool, base, date, curr:{}} */
+function openRead(editLatest){
+  const editing = !!editLatest;
+  const base = editing ? before() : latest();
+  rd = { editing, base, date: editing ? latest().date : today(), curr:{} };
+  state.meters.forEach(m => rd.curr[m.id] = editing && latest().values[m.id]!=null ? String(latest().values[m.id]) : '');
+  $('rStart').textContent = base ? ymd(base.date) : '第一次抄表';
+  $('rDate').value = rd.date; updateRSpan();
+  $('saveRead').textContent = editing ? '儲存修改' : '儲存電表';
+  $('readErr').hidden = true;
+  const L = latest();
+  $('editHint').innerHTML = (!editing && L && state.readings.length >= 2 && !isBilled(L))
+    ? `抄錯了？<button class="linkbtn" id="editLast">修改 ${ymd(L.date)} 的讀數</button>`
+    : editing ? '正在修改最近一次抄表。' : '';
+  const el = $('editLast'); if (el) el.addEventListener('click', () => openRead(true));
+  const box = $('rMeters'); box.innerHTML = '';
+  state.meters.forEach(m => {
+    const last = base && base.values[m.id]!=null ? base.values[m.id] : null;
+    const row = document.createElement('div'); row.className='m'; row.id='rr-'+m.id;
+    row.style.setProperty('--c', colorOf(m.id));
+    row.innerHTML = `<div class="head"><span class="bar"></span><span class="nm">${m.id}</span><span class="use">用電 <b id="ru-${m.id}">—</b> 度</span></div>
+      <div><span class="f">上次</span><div class="lastv">${last==null?'—':last}</div></div>
+      <div><label class="f" for="rc-${m.id}">這次讀數</label><input type="text" inputmode="numeric" class="drum" id="rc-${m.id}" placeholder="------" value="${rd.curr[m.id]}"></div>
+      <div class="meta">${m.dec?'<span class="hint">最右一格是小數，不用輸入</span>':''}<span id="rw-${m.id}"></span></div>`;
+    box.appendChild(row);
+    row.querySelector('input').addEventListener('input', e => { rd.curr[m.id] = e.target.value; updateRRow(m.id); });
+    updateRRow(m.id);
+  });
+  show('read');
+}
+function updateRSpan(){
+  const b = rd.base, d = days(b && b.date, rd.date);
+  $('rSpan').innerHTML = d == null ? '' : d <= 0 ? '<span class="msg e">這次抄表日期要比上次晚</span>' : `共 ${d} 天（台電每兩個月抄一次，約 60 天）`;
+}
+$('rDate').addEventListener('input', e => { rd.date = e.target.value; updateRSpan(); });
+function updateRRow(id){
+  const c = toInt(rd.curr[id]), last = rd.base ? rd.base.values[id] : null;
+  let u = null, msg = '';
+  if (c != null && last != null){
+    u = c - last;
+    const lu = usageBetween(rd.editing ? before(2) : before(1), rd.base, id);
+    if (u < 0) msg = '<span class="msg e">比上次小，可能打錯或換了新電表</span>';
+    else if (lu && u > lu*2) msg = `<span class="msg w">比上期（${fmt(lu)} 度）多 2 倍以上，請再確認</span>`;
+  }
+  $('ru-'+id).textContent = u==null ? '—' : fmt(u);
+  $('rw-'+id).innerHTML = msg;
+  $('rr-'+id).classList.toggle('bad', u != null && u < 0);
+}
+$('saveRead').addEventListener('click', () => {
+  const errs = [], values = {};
+  if (!rd.date) errs.push('請選這次抄表日期');
+  if (rd.base && rd.base.date && rd.date && rd.date <= rd.base.date) errs.push('這次抄表日期要比上次晚');
+  state.meters.forEach(m => {
+    const c = toInt(rd.curr[m.id]);
+    if (c == null) errs.push(`${m.id} 的讀數沒填或不是數字`);
+    else if (rd.base && rd.base.values[m.id]!=null && c < rd.base.values[m.id]) errs.push(`${m.id} 比上次小，請檢查`);
+    values[m.id] = c;
+  });
+  showErrs($('readErr'), errs);
+  if (errs.length) return;
+  if (rd.editing) state.readings[state.readings.length-1] = {date:rd.date, values};
+  else state.readings.push({date:rd.date, values});
+  persist(); renderAll();
+  toast(rd.editing ? '已修改讀數' : '讀數已儲存，帳單來了再按「計算電費」');
+  show('home');
+});
+
+/* ---------- 計算電費 ---------- */
+let lastResult = null;
+function openCalc(){
+  const L = latest(), P = before();
+  const blocked = $('calcBlocked'), ready = $('calcReady');
+  lastResult = null;
+  if (!L || !P || isBilled(L)){
+    blocked.hidden = false; ready.hidden = true;
+    blocked.innerHTML = `<p style="margin:0 0 12px">${!L || !P ? '至少要有兩次抄表紀錄才能計算。' : `最近一次抄表（${ymd(L.date)}）已經算過電費了。下次抄完電表再來算。`}</p><button class="primary" id="toRead">去抄電表</button>`;
+    $('toRead').addEventListener('click', () => openRead(false));
+    show('calc'); return;
+  }
+  blocked.hidden = true; ready.hidden = false;
+  $('cPeriod').innerHTML = `<span>${ymd(P.date)}</span><span class="arrow">→</span><span>${ymd(L.date)}</span>`;
+  const d = days(P.date, L.date);
+  $('cSpan').textContent = d == null ? '' : `共 ${d} 天，用的是最近兩次抄表`;
+  const ids = state.meters.map(m=>m.id);
+  let sum = 0;
+  $('usageTable').innerHTML = `<thead><tr><th>電表</th><th>上次</th><th>這次</th><th>度數</th></tr></thead><tbody>${ids.map(id => {
+    const u = usageBetween(P, L, id); sum += u ?? 0;
+    return `<tr><td style="--c:${colorOf(id)}"><b>${id}</b></td><td class="num">${P.values[id] ?? '—'}</td><td class="num">${L.values[id] ?? '—'}</td><td class="num pay">${u==null?'—':fmt(u)}</td></tr>`;
+  }).join('')}</tbody><tfoot><tr><td>合計</td><td></td><td></td><td class="num pay">${fmt(sum)}</td></tr></tfoot>`;
+  ['mainBill','sharedBill','billKwh'].forEach(k => $(k).value = '');
+  $('calcErr').hidden = true; $('result').hidden = true;
+  show('calc');
+}
+$('calcBtn').addEventListener('click', () => {
+  const L = latest(), P = before(), ids = state.meters.map(m=>m.id), errs = [];
+  ids.forEach(id => { if (P.values[id]==null || L.values[id]==null) errs.push(`${id} 缺少讀數，請先去抄電表補上`); });
+  const mb = toInt($('mainBill').value), sb = toInt($('sharedBill').value);
+  if (mb==null) errs.push('請填主帳單金額（整數）');
+  if (sb==null) errs.push('請填 1 樓帳單金額（沒有就填 0）');
+  const bkRaw = $('billKwh').value.trim(), bk = bkRaw === '' ? null : toInt(bkRaw);
+  if (bkRaw !== '' && bk == null) errs.push('計費度數要是整數');
+  const subSum = errs.length ? 0 : ids.reduce((a,id)=>a+L.values[id]-P.values[id],0);
+  if (!errs.length && subSum <= 0) errs.push('分表加起來用電是 0 度，無法分攤');
+  if (!errs.length && bk != null && bk < subSum) errs.push(`帳單度數 ${fmt(bk)} 比分表合計 ${fmt(subSum)} 還少，公共用電變成負的。通常是分表抄表日跟台電不同，請把計費度數留空，改用比例分攤。`);
+  showErrs($('calcErr'), errs);
+  if (errs.length){ $('result').hidden = true; return; }
+  const prev = {}, curr = {}; ids.forEach(id => { prev[id]=P.values[id]; curr[id]=L.values[id]; });
+  const r = compute(ids, prev, curr, mb, sb, bk);
+  lastResult = {start:P.date, date:L.date, prev, curr, mainBill:mb, sharedBill:sb, billKwh:bk, r};
+  renderResult(r, $('resTable'));
+  const high = r.mode === 'public' && r.pub > r.billKwh * 0.3;
+  $('resSub').innerHTML = summary(r) + ' 尾數已自動分配，總額剛好等於帳單。'
+    + (high ? `<br><span class="msg w">公共用電佔整棟 ${Math.round(r.pub/r.billKwh*100)}%，偏高。請確認分表抄表日跟台電帳單區間是否一致。</span>` : '');
+  $('copyFallback').hidden = true;
+  $('saveBtn').disabled = false; $('saveBtn').textContent = '儲存這期';
+  $('result').hidden = false;
+  $('result').scrollIntoView({behavior: smooth()});
+});
+$('copyBtn').addEventListener('click', () => lastResult && copy(lineText(lastResult.start, lastResult.date, lastResult.r), $('copyFallback')));
+$('saveBtn').addEventListener('click', () => {
+  if (!lastResult) return;
+  const {start, date, prev, curr, mainBill, sharedBill, billKwh} = lastResult;
+  state.records.push({id:'r'+Date.now(), start, date, prev, curr, mainBill, sharedBill, billKwh});
+  persist(); renderAll();
+  $('saveBtn').disabled = true; $('saveBtn').textContent = '已儲存';
+  toast('這期電費已存到紀錄');
+});
+
+/* ---------- 紀錄 ---------- */
+function renderHist(){
+  const box = $('hist'); box.innerHTML = '';
+  const recs = [...state.records].sort((a,b)=>b.date.localeCompare(a.date));
+  if (!recs.length) box.innerHTML = '<div class="panel empty">還沒有電費紀錄。</div>';
+  recs.forEach(rec => {
+    const ids = Object.keys(rec.curr).filter(id => rec.prev[id]!=null);
+    const r = compute(ids, rec.prev, rec.curr, rec.mainBill, rec.sharedBill, rec.billKwh ?? null);
+    const el = document.createElement('div'); el.className = 'panel rec';
+    el.innerHTML = `<div class="tophd"><span class="date">${range(rec.start, rec.date)}</span><span class="sum">$${fmt(rec.mainBill+rec.sharedBill)}</span></div>
+      <div class="tbl"><table></table></div>
+      <p class="sub" style="margin:0">${summary(r)}</p>
+      <textarea hidden readonly></textarea>
+      <div class="btns"><button class="cp">複製到 LINE</button><button class="ghost danger del">刪除</button></div>`;
+    renderResult(r, el.querySelector('table'));
+    el.querySelector('.cp').addEventListener('click', () => copy(lineText(rec.start, rec.date, r), el.querySelector('textarea')));
+    const del = el.querySelector('.del');
+    del.addEventListener('click', () => {
+      if (!del.dataset.armed){ del.dataset.armed='1'; del.textContent='確定刪除？再按一次'; setTimeout(()=>{ if (del.isConnected){ delete del.dataset.armed; del.textContent='刪除'; } }, 4000); return; }
+      state.records = state.records.filter(x => x.id !== rec.id);
+      persist(); renderAll(); toast('已刪除，這期可以重新計算');
+    });
+    box.appendChild(el);
+  });
+  const ids = state.meters.map(m=>m.id);
+  $('readHist').innerHTML = `<thead><tr><th>抄表日</th>${ids.map(id=>`<th>${id}</th>`).join('')}</tr></thead><tbody>${
+    [...state.readings].reverse().map(x => `<tr><td class="num">${ymd(x.date)}</td>${ids.map(id=>`<td class="num">${x.values[id] ?? '—'}</td>`).join('')}</tr>`).join('')}</tbody>`;
+}
+
+/* ---------- 設定 ---------- */
+let mDraft = [];
+function loadMDraft(){ mDraft = state.meters.map(m=>({id:m.id, dec:!!m.dec, orig:m.id})); renderMList(); }
+function renderMList(){
+  const box = $('mlist'); box.innerHTML = '';
+  mDraft.forEach((m,i) => {
+    const row = document.createElement('div'); row.className = 'mrow';
+    row.innerHTML = `<input type="text" id="mn-${i}" value="${m.id}" aria-label="電表名稱"><label><input type="checkbox" id="md-${i}" ${m.dec?'checked':''}>末格是小數</label><button class="ghost danger">移除</button>`;
+    row.querySelector('input[type=text]').addEventListener('input', e => m.id = e.target.value.trim());
+    row.querySelector('input[type=checkbox]').addEventListener('change', e => m.dec = e.target.checked);
+    row.querySelector('button').addEventListener('click', () => { mDraft.splice(i,1); renderMList(); });
+    box.appendChild(row);
+  });
+}
+$('addMeter').addEventListener('click', () => { mDraft.push({id:'', dec:false, orig:null}); renderMList(); });
+$('saveMeters').addEventListener('click', () => {
+  const ids = mDraft.map(m=>m.id);
+  if (ids.some(x=>!x)) return toast('有電表沒取名字');
+  if (new Set(ids).size !== ids.length) return toast('電表名稱重複了');
+  if (ids.some(x => /[<>"'&`\\]/.test(x))) return toast('名稱不能有 < > " \' & 這些符號');
+  const ren = (obj, a, b) => { if (obj && obj[a]!=null){ obj[b]=obj[a]; delete obj[a]; } };
+  mDraft.forEach(m => { if (m.orig && m.orig !== m.id){
+    state.readings.forEach(x => ren(x.values, m.orig, m.id));
+    state.records.forEach(r => { ren(r.prev, m.orig, m.id); ren(r.curr, m.orig, m.id); });
+  }});
+  state.meters = mDraft.map(m=>({id:m.id, dec:m.dec}));
+  persist(); renderAll(); toast('電表清單已儲存');
+});
+$('copyBackup').addEventListener('click', () => copy($('backupOut').value, $('backupOut')));
+$('restoreBtn').addEventListener('click', () => {
+  const btn = $('restoreBtn'), msg = $('restoreMsg');
+  let data;
+  try { data = JSON.parse($('restoreIn').value); } catch(e){ msg.textContent = '讀不懂這段文字，請確認是完整複製的備份。'; return; }
+  if (!data || !Array.isArray(data.meters) || !Array.isArray(data.records)){ msg.textContent = '這不是這個網頁的備份格式。'; return; }
+  if (!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent = `確定覆蓋？（備份內有 ${data.records.length} 期電費）`; return; }
+  delete btn.dataset.armed; btn.textContent = '還原';
+  state = migrate(data); persist(); renderAll();
+  $('restoreIn').value = ''; msg.textContent = ''; toast('已還原');
+});
+
+/* ---------- 頁面切換 ---------- */
+function show(v){
+  ['home','read','calc','hist','set'].forEach(k => $('v-'+k).hidden = k !== v);
+  document.querySelectorAll('nav button').forEach(b => b.dataset.v === v ? b.setAttribute('aria-current','page') : b.removeAttribute('aria-current'));
+  window.scrollTo(0,0);
+}
+function renderAll(){ renderHome(); renderHist(); loadMDraft(); $('backupOut').value = JSON.stringify(state); }
+const GO = {home: () => show('home'), read: () => openRead(false), calc: openCalc, hist: () => show('hist')};
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => GO[b.dataset.v]()));
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => show('home')));
+$('goRead').addEventListener('click', () => openRead(false));
+$('goCalc').addEventListener('click', openCalc);
+$('goSet').addEventListener('click', () => show('set'));
+renderAll(); show('home');
+</script>
+
+</body>
+</html>
